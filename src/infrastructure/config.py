@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     RABBITMQ_QUEUE_NAME: str = "reset-password-stream"
     RABBITMQ_DLQ_NAME: str = "reset-password-dlq"
 
+    # Application
+    LOG_LEVEL: str = "INFO"
+
     # AWS
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str

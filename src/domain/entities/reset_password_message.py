@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -13,6 +13,7 @@ class ResetPasswordMessage(BaseModel):
     body: str
     published_at: datetime
     sent_at: Optional[datetime] = None
+    template_context: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         frozen = True
