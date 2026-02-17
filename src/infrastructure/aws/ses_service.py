@@ -2,6 +2,7 @@ import logging
 
 import aioboto3
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pydantic import EmailStr
 
 from domain.exceptions import EmailSendingError
 from domain.interfaces.services.email_sender import IEmailSender
@@ -9,7 +10,6 @@ from domain.interfaces.services.email_sender import IEmailSender
 logger = logging.getLogger(__name__)
 
 TEMPLATE_DIR = "src/templates"
-
 
 class SesEmailSender(IEmailSender):
 
@@ -31,7 +31,7 @@ class SesEmailSender(IEmailSender):
             autoescape=select_autoescape(["html"]),
         )
 
-    async def send_email(self, to: str, subject: str, body: str) -> None:
+    async def send_email(self, to: EmailStr, subject: str, body: str) -> None:
         template = self._jinja_env.get_template("reset_password.html")
         html_body = template.render(username=to, reset_link=body)
 

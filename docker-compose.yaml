@@ -1,6 +1,6 @@
 services:
   mongodb:
-    image: bitnami/mongodb:7.0
+    image: bitnami/mongodb:latest
     container_name: notification-mongodb
     environment:
       - MONGODB_REPLICA_SET_MODE=primary
@@ -8,7 +8,7 @@ services:
       - MONGODB_REPLICA_SET_KEY=replicasetkey
       - MONGODB_ADVERTISED_HOSTNAME=mongodb
       - MONGODB_PORT_NUMBER=27017
-      - ALLOW_EMPTY_PASSWORD=yes
+      - MONGODB_ROOT_PASSWORD=devpassword
     ports:
       - "${MONGO_PORT:-27017}:27017"
     volumes:

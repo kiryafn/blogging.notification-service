@@ -14,15 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class PasswordResetConsumer:
-    """
-    RabbitMQ consumer for the reset-password-stream queue.
-
-    Strategy:
-    - Validation errors (bad JSON / schema) → reject immediately → DLQ.
-    - Use case is retried up to 5 times via tenacity.
-    - On success after any attempt → ack.
-    - After 5 failed attempts (RetryError) → reject → DLQ.
-    """
 
     DLX_NAME = "dlx"
     DLQ_ROUTING_KEY = "dead_letters"
@@ -42,11 +33,9 @@ class PasswordResetConsumer:
         self._prefetch_count = prefetch_count
 
     async def start(self) -> None:
-        """Configure queues, DLX/DLQ and start consuming."""
         channel: AbstractRobustChannel = await self._client.get_channel()
         await channel.set_qos(prefetch_count=self._prefetch_count)
 
-        # Dead-letter exchange and queue
         dlx = await channel.declare_exchange(
             self.DLX_NAME,
             aio_pika.ExchangeType.DIRECT,
@@ -55,7 +44,6 @@ class PasswordResetConsumer:
         dlq = await channel.declare_queue(self._dlq_name, durable=True)
         await dlq.bind(dlx, routing_key=self.DLQ_ROUTING_KEY)
 
-        # Main queue with DLQ configuration
         queue = await channel.declare_queue(
             self._queue_name,
             durable=True,
