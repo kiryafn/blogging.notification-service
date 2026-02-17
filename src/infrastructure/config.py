@@ -4,24 +4,32 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    environment: str = "development"
+    log_level: str = "INFO"
+
     # MongoDB
-    MONGO_URI: str
-    MONGO_DB_NAME: str = "notification_db"
-    MONGO_COLLECTION: str = "messages"
+    mongo_uri: str = "mongodb://localhost:27017/?replicaSet=rs0"
+    mongo_db: str = "notification_db"
 
     # RabbitMQ
-    RABBITMQ_URI: str
-    RABBITMQ_QUEUE_NAME: str = "reset-password-stream"
-    RABBITMQ_DLQ_NAME: str = "reset-password-dlq"
+    rabbitmq_user: str = "admin"
+    rabbitmq_password: str = "admin"
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    rabbitmq_vhost: str = "/"
 
-    # Application
-    LOG_LEVEL: str = "INFO"
+    @property
+    def rabbitmq_url(self) -> str:
+        return (
+            f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}"
+            f"@{self.rabbitmq_host}:{self.rabbitmq_port}/{self.rabbitmq_vhost}"
+        )
 
-    # AWS
-    AWS_ACCESS_KEY_ID: str
-    AWS_SECRET_ACCESS_KEY: str
-    AWS_REGION: str
-    AWS_SES_SENDER: str
+    # AWS SES
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "us-east-1"
+    aws_ses_sender: str = "noreply@example.com"
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent.parent / ".env"),
