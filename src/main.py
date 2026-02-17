@@ -1,67 +1,69 @@
 import asyncio
 import logging
 import signal
-import sys
 
-import aio_pika
-
-from domain.entities import ResetPasswordMessage
-from infrastructure.aws.ses_gateway import SesEmailGateway
-from infrastructure.brokers.rabbitmq_consumer import consume_reset_password_queue
+from application.usecases.send_reset_password_email import SendResetPasswordEmailUseCase
+from infrastructure.aws.ses_service import SesEmailSender
 from infrastructure.config import settings
+from infrastructure.mongo.database import MongoDatabase
+from infrastructure.mongo.repository.notification_repository import MongoNotificationRepository
+from infrastructure.rabbitmq.client import RabbitMQClient
+from infrastructure.rabbitmq.consumers.password_reset_consumer import PasswordResetConsumer
 
-
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger(__name__)
 
-_connection: aio_pika.RobustConnection | None = None
 
-
-async def handle_reset_password(message: ResetPasswordMessage) -> None:
-    """Send password reset email via SES."""
-    gateway = SesEmailGateway()
-    await gateway.send_email(message)
-
-
-async def run_consumer() -> None:
-    global _connection
-    _connection = await aio_pika.connect_robust(
-        settings.RABBITMQ_URI,
-        timeout=30,
+async def main() -> None:
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    logger.info("Connected to RabbitMQ")
+
+    # --- Infrastructure ---
+    mongo_db = MongoDatabase(uri=settings.mongo_uri, db_name=settings.mongo_db)
+    repository = MongoNotificationRepository(db=mongo_db)
+
+    email_sender = SesEmailSender(
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        sender=settings.aws_ses_sender,
+    )
+
+    rabbitmq_client = RabbitMQClient(url=settings.rabbitmq_url)
+    await rabbitmq_client.connect()
+
+    # --- Use cases ---
+    use_case = SendResetPasswordEmailUseCase(
+        repository=repository,
+        email_sender=email_sender,
+        db=mongo_db,
+    )
+
+    # --- Consumer ---
+    consumer = PasswordResetConsumer(client=rabbitmq_client, use_case=use_case)
+    await consumer.start()
+
+    # --- Graceful Shutdown ---
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def handle_signal() -> None:
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, handle_signal)
+
+    logger.info("Notification service is running. Waiting for messages...")
 
     try:
-        await consume_reset_password_queue(_connection, handle_reset_password)
+        await stop_event.wait()
     finally:
-        if _connection:
-            await _connection.close()
-            logger.info("RabbitMQ connection closed")
-
-
-def main() -> None:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    def shutdown(_sig=None, _frame=None):
-        logger.info("Shutting down...")
-        if _connection and not _connection.is_closed:
-            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(_connection.close()))
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(sig, shutdown)
-
-    try:
-        loop.run_until_complete(run_consumer())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
+        logger.info("Shutting down service...")
+        await rabbitmq_client.close()
+        mongo_db.close()
+        logger.info("Shutdown complete.")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
