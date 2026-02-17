@@ -1,1 +1,0 @@
-from .reset_password_message import ResetPasswordMessage as ResetPasswordMessage
